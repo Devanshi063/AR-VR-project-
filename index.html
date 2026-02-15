@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>MindWave VR: Binaural Edition</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.2/dist/aframe-environment-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-event-set-component@5.0.0/dist/aframe-event-set-component.min.js"></script>
+
+    <script>
+        // --- BINAURAL AUDIO ENGINE (The Science Part) ---
+        let audioCtx, oscillatorLeft, oscillatorRight, gainNode;
+
+        function startBinauralBeat(beatFrequency) {
+            // 1. Create Audio Context if not exists
+            if (!audioCtx) {
+                audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // 2. Stop previous sounds
+            if (oscillatorLeft) {
+                oscillatorLeft.stop();
+                oscillatorRight.stop();
+            }
+
+            const baseFreq = 200; // Comfortable base tone (Hz)
+
+            // 3. Create Left Ear Tone (Base)
+            oscillatorLeft = audioCtx.createOscillator();
+            oscillatorLeft.type = 'sine';
+            oscillatorLeft.frequency.value = baseFreq;
+            const pannerLeft = audioCtx.createStereoPanner();
+            pannerLeft.pan.value = -1; // Full Left
+
+            // 4. Create Right Ear Tone (Base + Beat)
+            oscillatorRight = audioCtx.createOscillator();
+            oscillatorRight.type = 'sine';
+            oscillatorRight.frequency.value = baseFreq + beatFrequency;
+            const pannerRight = audioCtx.createStereoPanner();
+            pannerRight.pan.value = 1; // Full Right
+
+            // 5. Volume Control (Low, background hum)
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.1; // Keep it subtle
+
+            // 6. Connect & Play
+            oscillatorLeft.connect(pannerLeft).connect(gainNode).connect(audioCtx.destination);
+            oscillatorRight.connect(pannerRight).connect(gainNode).connect(audioCtx.destination);
+
+            oscillatorLeft.start();
+            oscillatorRight.start();
+        }
+
+        function stopBinaural() {
+            if (gainNode) gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+            setTimeout(() => {
+                if (oscillatorLeft) oscillatorLeft.stop();
+                if (oscillatorRight) oscillatorRight.stop();
+            }, 500);
+        }
+
+        // --- MOOD HANDLER ---
+        AFRAME.registerComponent('mood-handler', {
+            init: function() {
+                const buttons = document.querySelectorAll('.mood-card');
+
+                buttons.forEach(btn => {
+                    // Hover Animation
+                    btn.addEventListener('mouseenter', () => {
+                        btn.setAttribute('animation', 'property: scale; to: 1.1 1.1 1; dur: 200');
+                        btn.children[0].setAttribute('material', 'color: #fff; opacity: 0.2');
+                    });
+                    btn.addEventListener('mouseleave', () => {
+                        btn.setAttribute('animation', 'property: scale; to: 1 1 1; dur: 200');
+                        btn.children[0].setAttribute('material', 'color: #000; opacity: 0.6');
+                    });
+
+                    // Click Logic
+                    btn.addEventListener('click', () => {
+                        const mood = btn.getAttribute('data-mood');
+                        this.setMood(mood);
+                    });
+                });
+            },
+
+            setMood: function(key) {
+                // Hide Menu
+                const menu = document.querySelector('#main-menu');
+                menu.setAttribute('visible', 'false');
+                menu.setAttribute('position', '0 -10 0');
+
+                const env = document.querySelector('#environment');
+                const audio = document.querySelector('#ambient-sound');
+                const hud = document.querySelector('#hud-text');
+                const hzText = document.querySelector('#hz-display');
+
+                // Reset Background Audio
+                audio.components.sound.stopSound();
+
+                // --- CONFIGURATION ---
+                if (key === 'general') {
+                    // ALPHA WAVES (8-12Hz) - Relaxation
+                    env.setAttribute('environment', 'preset: forest; fog: 0.04; groundColor: #1b2612');
+                    audio.setAttribute('sound', 'src: #src-waterfall; loop: true; volume: 1.0');
+                    startBinauralBeat(10); // 10Hz Alpha
+                    hud.setAttribute('value', 'General Relaxation');
+                    hzText.setAttribute('value', 'Binaural: 10Hz (Alpha Waves)');
+                } else if (key === 'devotional') {
+                    // THETA WAVES (4-8Hz) - Deep Meditation
+                    env.setAttribute('environment', 'preset: starry; fog: 0.02; lightPosition: 0 10 -5');
+                    audio.setAttribute('sound', 'src: #src-mantra; loop: true; volume: 0.8');
+                    startBinauralBeat(6); // 6Hz Theta
+                    hud.setAttribute('value', 'Devotional Meditation');
+                    hzText.setAttribute('value', 'Binaural: 6Hz (Theta Waves)');
+                } else if (key === 'study') {
+                    // BETA WAVES (14-30Hz) - Focus
+                    env.setAttribute('environment', 'preset: japan; skyType: gradient; lighting: point');
+                    audio.setAttribute('sound', 'src: #src-rain; loop: true; volume: 0.5'); // Soft rain for study
+                    startBinauralBeat(20); // 20Hz Beta
+                    hud.setAttribute('value', 'Deep Focus Mode');
+                    hzText.setAttribute('value', 'Binaural: 20Hz (Beta Waves)');
+                } else if (key === 'workout') {
+                    // GAMMA WAVES (30Hz+) - Energy
+                    env.setAttribute('environment', 'preset: volcano; groundColor: #222');
+                    audio.setAttribute('sound', 'src: #src-drums; loop: true; volume: 1.2');
+                    startBinauralBeat(40); // 40Hz Gamma
+                    hud.setAttribute('value', 'High Energy Workout');
+                    hzText.setAttribute('value', 'Binaural: 40Hz (Gamma Waves)');
+                }
+
+                // Play Ambient Sound
+                setTimeout(() => audio.components.sound.playSound(), 100);
+
+                // Show HUD
+                hud.setAttribute('visible', 'true');
+                hzText.setAttribute('visible', 'true');
+            }
+        });
+
+        // Start Button Logic
+        AFRAME.registerComponent('start-exp', {
+            init: function() {
+                this.el.addEventListener('click', () => {
+                    document.querySelector('#start-screen').setAttribute('visible', 'false');
+                    document.querySelector('#start-screen').setAttribute('position', '0 -50 0');
+                    document.querySelector('#main-menu').setAttribute('visible', 'true');
+
+                    // Init Audio Context
+                    const context = new(window.AudioContext || window.webkitAudioContext)();
+                    context.resume();
+                });
+            }
+        });
+    </script>
+</head>
+
+<body>
+    <a-scene renderer="antialias: true; colorManagement: true;" cursor="rayOrigin: mouse" raycaster="objects: .clickable">
+
+        <a-assets>
+            <a-asset-item id="font-exo" src="https://cdn.aframe.io/fonts/Exo2Bold.fnt"></a-asset-item>
+            <audio id="src-waterfall" src="https://cdn.pixabay.com/download/audio/2022/11/04/audio_c36e4f3261.mp3" crossorigin="anonymous"></audio>
+            <audio id="src-mantra" src="https://cdn.pixabay.com/download/audio/2022/10/14/audio_95e263725f.mp3" crossorigin="anonymous"></audio>
+            <audio id="src-rain" src="https://cdn.pixabay.com/download/audio/2022/03/23/audio_078853754e.mp3" crossorigin="anonymous"></audio>
+            <audio id="src-drums" src="https://cdn.pixabay.com/download/audio/2022/03/10/audio_5505047c55.mp3" crossorigin="anonymous"></audio>
+        </a-assets>
+
+        <a-entity id="start-screen" position="0 1.6 -2">
+            <a-plane width="4" height="2.5" color="#000" opacity="0.9"></a-plane>
+            <a-text value="Binaural VR" position="0 0.6 0" align="center" width="7" font="https://cdn.aframe.io/fonts/Exo2Bold.fnt" color="#4CC3D9"></a-text>
+            <a-text value="HEADPHONES REQUIRED" position="0 0.3 0" align="center" width="4" color="#ff3333"></a-text>
+            <a-text value="Left & Right ears hear different frequencies\nto synchronize your brainwaves." position="0 0 0" align="center" width="3" color="#ccc"></a-text>
+
+            <a-entity class="clickable" start-exp position="0 -0.5 0.1" geometry="primitive: plane; width: 1.5; height: 0.5" material="color: #fff; shader: flat" event-set__enter="_event: mouseenter; scale: 1.1 1.1 1" event-set__leave="_event: mouseleave; scale: 1 1 1">
+                <a-text value="START" align="center" width="4" color="#000" position="0 0 0.01"></a-text>
+            </a-entity>
+        </a-entity>
+
+        <a-entity id="main-menu" visible="false" mood-handler position="0 1.6 -2.5">
+            <a-text value="Select Your Goal" align="center" position="0 1.1 0" width="6" font="https://cdn.aframe.io/fonts/Exo2Bold.fnt"></a-text>
+
+            <a-entity class="mood-card clickable" data-mood="general" position="-1.5 0.3 0">
+                <a-plane width="1.3" height="0.8" color="#000" opacity="0.7"></a-plane>
+                <a-text value="General" align="center" position="0 0.2 0.02" width="5" color="#4caf50"></a-text>
+                <a-text value="Relaxation (Alpha)" align="center" position="0 0 0.02" width="3" color="#ccc"></a-text>
+            </a-entity>
+
+            <a-entity class="mood-card clickable" data-mood="devotional" position="1.5 0.3 0">
+                <a-plane width="1.3" height="0.8" color="#000" opacity="0.7"></a-plane>
+                <a-text value="Devotional" align="center" position="0 0.2 0.02" width="5" color="#ffeb3b"></a-text>
+                <a-text value="Meditation (Theta)" align="center" position="0 0 0.02" width="3" color="#ccc"></a-text>
+            </a-entity>
+
+            <a-entity class="mood-card clickable" data-mood="study" position="-1.5 -0.6 0">
+                <a-plane width="1.3" height="0.8" color="#000" opacity="0.7"></a-plane>
+                <a-text value="Study / Focus" align="center" position="0 0.2 0.02" width="5" color="#2196f3"></a-text>
+                <a-text value="Concentration (Beta)" align="center" position="0 0 0.02" width="3" color="#ccc"></a-text>
+            </a-entity>
+
+            <a-entity class="mood-card clickable" data-mood="workout" position="1.5 -0.6 0">
+                <a-plane width="1.3" height="0.8" color="#000" opacity="0.7"></a-plane>
+                <a-text value="Workout" align="center" position="0 0.2 0.02" width="5" color="#f44336"></a-text>
+                <a-text value="High Energy (Gamma)" align="center" position="0 0 0.02" width="3" color="#ccc"></a-text>
+            </a-entity>
+        </a-entity>
+
+        <a-text id="hud-text" value="" visible="false" position="0 2.5 -3" align="center" width="6" color="#fff" font="https://cdn.aframe.io/fonts/Exo2Bold.fnt"></a-text>
+        <a-text id="hz-display" value="" visible="false" position="0 2.3 -3" align="center" width="4" color="#4CC3D9"></a-text>
+
+        <a-entity id="environment" environment="preset: starry; ground: flat"></a-entity>
+        <a-entity id="ambient-sound" sound=""></a-entity>
+
+        <a-entity id="rig">
+            <a-camera position="0 1.6 0"></a-camera>
+            <a-entity oculus-touch-controls="hand: left" raycaster="objects: .clickable; far: 5; showLine: true" laser-controls="hand: left"></a-entity>
+            <a-entity oculus-touch-controls="hand: right" raycaster="objects: .clickable; far: 5; showLine: true" laser-controls="hand: right"></a-entity>
+        </a-entity>
+
+    </a-scene>
+</body>
+
+</html>
